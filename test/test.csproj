@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <StartupObject>test.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Net.Myzuc.TcpStreamApi.Client\Net.Myzuc.TcpStreamApi.Client.csproj" />
+    <ProjectReference Include="..\Net.Myzuc.TcpStreamApi.Server\Net.Myzuc.TcpStreamApi.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Net.Myzuc.UtilLib">
+      <HintPath>..\..\Net.Myzuc.UtilLib\bin\Release\net8.0\Net.Myzuc.UtilLib.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

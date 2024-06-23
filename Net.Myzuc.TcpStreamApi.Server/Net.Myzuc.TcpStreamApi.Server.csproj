@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<AssemblyName>Net.Myzuc.TcpStreamApi.Server</AssemblyName>
+		<RootNamespace>Net.Myzuc.TcpStreamApi.Server</RootNamespace>
+		<PackageId>Net.Myzuc.TcpStreamApi.Server</PackageId>
+		<Title>Net.Myzuc.TcpStreamApi.Server</Title>
+		<Version>1.0</Version>
+		<Authors>shishioko@myzuc.net</Authors>
+		<Company>myzuc.net</Company>
+		<Product>Net.Myzuc.TcpStreamApi</Product>
+		<Copyright>myzuc.net 2024, All Rights Reserved.</Copyright>
+		<RepositoryUrl>https://github.com/shishioko/Net.Myzuc.TcpStreamApi</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<AssemblyVersion>1.0</AssemblyVersion>
+		<FileVersion>1.0</FileVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <Reference Include="Net.Myzuc.UtilLib">
+	    <HintPath>..\..\Net.Myzuc.UtilLib\bin\Release\net8.0\Net.Myzuc.UtilLib.dll</HintPath>
+	  </Reference>
+	</ItemGroup>
+
+</Project>
+
