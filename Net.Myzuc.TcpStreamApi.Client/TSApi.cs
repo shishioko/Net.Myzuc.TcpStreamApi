@@ -1,6 +1,7 @@
 ﻿using Net.Myzuc.UtilLib;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -42,7 +43,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
             return new(socket);
         }
         private readonly Socket Socket;
-        private readonly DataStream Stream;
+        private readonly DataStream<NetworkStream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly Dictionary<int, ChannelWriter<byte[]>?> Streams = [];
         private readonly Dictionary<int, ChannelWriter<byte[]>> InitialStreams = [];
@@ -73,22 +74,22 @@ namespace Net.Myzuc.TcpStreamApi.Client
                 Channel<byte[]> inputChannel = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions() { SingleReader = false, SingleWriter = false });
                 InitialStreams.Add(streamId, inputChannel.Writer);
                 Sync.Release();
-                using DataStream requestStream = new();
+                using DataStream<MemoryStream> requestStream = new(new());
                 requestStream.WriteS32(streamId);
-                using DataStream requestDataStream = new();
+                using DataStream<MemoryStream> requestDataStream = new(new());
                 requestDataStream.WriteStringS32(endpoint);
                 requestDataStream.WriteS32(input.Length);
                 requestDataStream.WriteU8A(input);
-                byte[] requestDataBuffer = requestDataStream.Get();
+                byte[] requestDataBuffer = requestDataStream.Stream.ToArray();
                 requestStream.WriteS32(requestDataBuffer.Length);
                 requestStream.WriteU8A(requestDataBuffer);
-                byte[] requestBuffer = requestStream.Get();
+                byte[] requestBuffer = requestStream.Stream.ToArray();
                 await Sync.WaitAsync();
                 await Stream.WriteS32Async(requestBuffer.Length);
                 await Stream.WriteU8AAsync(requestBuffer);
                 Sync.Release();
                 ChannelStream responseChannel = new(inputChannel.Reader, null);
-                using DataStream responseStream = new(responseChannel);
+                using DataStream<ChannelStream> responseStream = new(responseChannel);
                 int result = await responseStream.ReadS32Async();
                 await Sync.WaitAsync();
                 InitialStreams.Remove(streamId);
@@ -137,7 +138,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
         }
         private async Task HandleAsync(byte[] inputBuffer)
         {
-            using DataStream inputStream = new(inputBuffer);
+            using DataStream<MemoryStream> inputStream = new(new(inputBuffer));
             int streamId = inputStream.ReadS32();
             byte[] data = inputStream.ReadU8A(inputStream.ReadS32());
             await Sync.WaitAsync();
@@ -166,21 +167,21 @@ namespace Net.Myzuc.TcpStreamApi.Client
                 while (!reader.Completion.IsCompleted)
                 {
                     byte[] data = await reader.ReadAsync();
-                    using DataStream outputStream = new();
+                    using DataStream<MemoryStream> outputStream = new(new());
                     outputStream.WriteS32(streamId);
                     outputStream.WriteS32(data.Length);
                     outputStream.WriteU8A(data);
-                    byte[] outputBuffer = outputStream.Get();
+                    byte[] outputBuffer = outputStream.Stream.ToArray();
                     await Sync.WaitAsync();
                     await Stream.WriteS32Async(outputBuffer.Length);
                     await Stream.WriteU8AAsync(outputBuffer);
                     Sync.Release();
                 }
                 {
-                    using DataStream outputStream = new();
+                    using DataStream<MemoryStream> outputStream = new(new());
                     outputStream.WriteS32(streamId);
                     outputStream.WriteS32(0);
-                    byte[] outputBuffer = outputStream.Get();
+                    byte[] outputBuffer = outputStream.Stream.ToArray();
                     await Sync.WaitAsync();
                     await Stream.WriteS32Async(outputBuffer.Length);
                     await Stream.WriteU8AAsync(outputBuffer);

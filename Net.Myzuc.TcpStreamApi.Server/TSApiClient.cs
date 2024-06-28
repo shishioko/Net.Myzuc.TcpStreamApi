@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using System.Threading;
 using System.Threading.Tasks;
 using System;
+using System.IO;
 
 namespace Net.Myzuc.TcpStreamApi.Server
 {
@@ -12,7 +13,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
     {
         private readonly TSApiServer Server;
         private readonly Socket Socket;
-        private readonly DataStream Stream;
+        private readonly DataStream<NetworkStream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly Dictionary<int, ChannelWriter<byte[]>?> Streams = [];
         public TSApiClient(TSApiServer server, Socket socket)
@@ -47,7 +48,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
         }
         private async Task HandleAsync(byte[] inputBuffer)
         {
-            using DataStream packetStream = new(inputBuffer);
+            using DataStream<MemoryStream> packetStream = new(new(inputBuffer));
             int streamId = packetStream.ReadS32();
             byte[] data = packetStream.ReadU8A(packetStream.ReadS32());
             await Sync.WaitAsync();
@@ -65,9 +66,9 @@ namespace Net.Myzuc.TcpStreamApi.Server
             }
             else
             {
-                using DataStream requestStream = new(data);
+                using DataStream<MemoryStream> requestStream = new(new(data));
                 Server.Sync.Wait();
-                using DataStream responseStream = new();
+                using DataStream<MemoryStream> responseStream = new(new());
                 responseStream.WriteS32(streamId);
                 responseStream.WriteS32(4);
                 if (Server.Endpoints.TryGetValue(requestStream.ReadStringS32(), out Func<byte[], Task<ChannelStream>>? method))
@@ -88,7 +89,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
                     }
                 }
                 else responseStream.WriteS32(-2);
-                byte[] responseBuffer = responseStream.Get();
+                byte[] responseBuffer = responseStream.Stream.ToArray();
                 await Stream.WriteS32Async(responseBuffer.Length);
                 await Stream.WriteU8AAsync(responseBuffer);
                 Server.Sync.Release();
@@ -102,21 +103,21 @@ namespace Net.Myzuc.TcpStreamApi.Server
                 while (!reader.Completion.IsCompleted)
                 {
                     byte[] data = await reader.ReadAsync();
-                    using DataStream outputStream = new();
+                    using DataStream<MemoryStream> outputStream = new(new());
                     outputStream.WriteS32(streamId);
                     outputStream.WriteS32(data.Length);
                     outputStream.WriteU8A(data);
-                    byte[] outputBuffer = outputStream.Get();
+                    byte[] outputBuffer = outputStream.Stream.ToArray();
                     await Sync.WaitAsync();
                     await Stream.WriteS32Async(outputBuffer.Length);
                     await Stream.WriteU8AAsync(outputBuffer);
                     Sync.Release();
                 }
                 {
-                    using DataStream outputStream = new();
+                    using DataStream<MemoryStream> outputStream = new(new());
                     outputStream.WriteS32(streamId);
                     outputStream.WriteS32(0);
-                    byte[] outputBuffer = outputStream.Get();
+                    byte[] outputBuffer = outputStream.Stream.ToArray();
                     await Sync.WaitAsync();
                     await Stream.WriteS32Async(outputBuffer.Length);
                     await Stream.WriteU8AAsync(outputBuffer);
