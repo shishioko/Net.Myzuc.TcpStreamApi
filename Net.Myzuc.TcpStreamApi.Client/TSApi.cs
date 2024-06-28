@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace Net.Myzuc.TcpStreamApi.Client
@@ -18,7 +18,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
         }
         public static async Task<TSApi> ConnectAsync(string host, ushort port)
         {
-            List<Exception> exceptions = new List<Exception>();
+            List<Exception> exceptions = [];
             foreach(IPAddress ip in (await Dns.GetHostEntryAsync(host)).AddressList)
             {
                 try
@@ -42,89 +42,48 @@ namespace Net.Myzuc.TcpStreamApi.Client
             await socket.ConnectAsync(host);
             return new(socket);
         }
-        private readonly Socket Socket;
         private readonly DataStream<NetworkStream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
-        private readonly Dictionary<int, ChannelWriter<byte[]>?> Streams = [];
-        private readonly Dictionary<int, ChannelWriter<byte[]>> InitialStreams = [];
-        private int NextStream = 0;
+        private readonly Dictionary<Guid, ChannelStream> Streams = [];
         private TSApi(Socket socket)
         {
-            Socket = socket;
-            Stream = new(new NetworkStream(socket, false));
+            Stream = new(new NetworkStream(socket));
             _ = ReceiveAsync();
         }
         public void Dispose()
         {
-            Socket.Dispose();
             Stream.Dispose();
+            Sync.Dispose();
+            foreach (ChannelStream stream in Streams.Values) stream.Dispose();
         }
-        public ChannelStream Interact(string endpoint, byte[] input)
+        public ChannelStream Interact(string endpoint)
         {
-            return InteractAsync(endpoint, input).Result;
+            return InteractAsync(endpoint).Result;
         }
-        public async Task<ChannelStream> InteractAsync(string endpoint, byte[] input)
+        public async Task<ChannelStream> InteractAsync(string endpoint)
         {
-            bool failed = false;
-            try
-            {
-                await Sync.WaitAsync();
-                while (Streams.ContainsKey(NextStream) || InitialStreams.ContainsKey(NextStream)) NextStream++;
-                int streamId = NextStream;
-                Channel<byte[]> inputChannel = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions() { SingleReader = false, SingleWriter = false });
-                InitialStreams.Add(streamId, inputChannel.Writer);
-                Sync.Release();
-                using DataStream<MemoryStream> requestStream = new(new());
-                requestStream.WriteS32(streamId);
-                using DataStream<MemoryStream> requestDataStream = new(new());
-                requestDataStream.WriteStringS32(endpoint);
-                requestDataStream.WriteS32(input.Length);
-                requestDataStream.WriteU8A(input);
-                byte[] requestDataBuffer = requestDataStream.Stream.ToArray();
-                requestStream.WriteS32(requestDataBuffer.Length);
-                requestStream.WriteU8A(requestDataBuffer);
-                byte[] requestBuffer = requestStream.Stream.ToArray();
-                await Sync.WaitAsync();
-                await Stream.WriteS32Async(requestBuffer.Length);
-                await Stream.WriteU8AAsync(requestBuffer);
-                Sync.Release();
-                ChannelStream responseChannel = new(inputChannel.Reader, null);
-                using DataStream<ChannelStream> responseStream = new(responseChannel);
-                int result = await responseStream.ReadS32Async();
-                await Sync.WaitAsync();
-                InitialStreams.Remove(streamId);
-                if (result < 0)
-                {
-                    Sync.Release();
-                    failed = true;
-                    switch (result)
-                    {
-                        case -1: throw new AggregateException("Internal Host Error");
-                        case -2: throw new ArgumentOutOfRangeException(nameof(endpoint));
-                        case -3: throw new ArgumentException(nameof(endpoint));
-                        default: throw new ProtocolViolationException();
-                    }
-                }
-                Channel<byte[]> outputChannel = Channel.CreateUnbounded<byte[]>(new() { SingleReader = false, SingleWriter = false });
-                ChannelStream communications = new((result & 0x01) != 0x00 ? inputChannel.Reader : null, (result & 0x02) != 0x00 ? outputChannel.Writer : null);
-                if (communications.Reader is not null || communications.Writer is not null) Streams.Add(streamId, inputChannel.Writer);
-                _ = SendAsync(streamId, outputChannel.Reader);
-                Sync.Release();
-                return communications;
-            }
-            catch(Exception)
-            {
-                if (failed) Dispose();
-                throw;
-            }
+            await Sync.WaitAsync();
+            Guid streamId = Guid.NewGuid();
+            while (Streams.ContainsKey(streamId)) streamId = Guid.NewGuid();
+            (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
+            Streams.Add(streamId, appStream);
+            _ = SendAsync(streamId, appStream);
+            Sync.Release();
+            using DataStream<MemoryStream> requestStream = new(new());
+            requestStream.WriteGuid(streamId);
+            requestStream.WriteU8A(Encoding.UTF8.GetBytes(endpoint));
+            await Sync.WaitAsync();
+            await Stream.WriteU8AVAsync(requestStream.Stream.ToArray());
+            Sync.Release();
+            return userStream;
         }
         private async Task ReceiveAsync()
         {
             try
             {
-                while (Socket.Connected)
+                while (Stream.Stream.Socket.Connected)
                 {
-                    _ = HandleAsync(await Stream.ReadU8AAsync(await Stream.ReadS32Async()));
+                    _ = HandleAsync(await Stream.ReadU8AVAsync());
                 }
             }
             catch (Exception)
@@ -139,62 +98,40 @@ namespace Net.Myzuc.TcpStreamApi.Client
         private async Task HandleAsync(byte[] inputBuffer)
         {
             using DataStream<MemoryStream> inputStream = new(new(inputBuffer));
-            int streamId = inputStream.ReadS32();
-            byte[] data = inputStream.ReadU8A(inputStream.ReadS32());
+            Guid streamId = inputStream.ReadGuid();
+            byte[] data = inputBuffer[16..];
             await Sync.WaitAsync();
-            if (InitialStreams.TryGetValue(streamId, out ChannelWriter<byte[]>? writer))
+            if (!Streams.TryGetValue(streamId, out ChannelStream? stream)) throw new ProtocolViolationException("Unregistered stream was written");
+            await stream!.WriteAsync(data);
+            if (data.Length <= 0)
             {
-                await writer.WriteAsync(data);
-            }
-            else if (Streams.TryGetValue(streamId, out ChannelWriter<byte[]>? reader))
-            {
-                if (reader is not null)
-                {
-                    if (data.Length > 0) await reader.WriteAsync(data);
-                    else
-                    {
-                        reader.Complete();
-                        Streams.Remove(streamId);
-                    }
-                }
+                stream.Writer!.Complete();
+                Streams.Remove(streamId);
             }
             Sync.Release();
         }
-        private async Task SendAsync(int streamId, ChannelReader<byte[]> reader)
+        private async Task SendAsync(Guid streamId, ChannelStream stream)
         {
             try
             {
-                while (!reader.Completion.IsCompleted)
+                while (true)
                 {
-                    byte[] data = await reader.ReadAsync();
+                    bool complete = !await stream.Reader!.WaitToReadAsync();
+                    byte[] data = complete ? [] : await stream.Reader!.ReadAsync();
                     using DataStream<MemoryStream> outputStream = new(new());
-                    outputStream.WriteS32(streamId);
-                    outputStream.WriteS32(data.Length);
+                    outputStream.WriteGuid(streamId);
                     outputStream.WriteU8A(data);
-                    byte[] outputBuffer = outputStream.Stream.ToArray();
                     await Sync.WaitAsync();
-                    await Stream.WriteS32Async(outputBuffer.Length);
-                    await Stream.WriteU8AAsync(outputBuffer);
+                    await Stream.WriteU8AVAsync(outputStream.Stream.ToArray());
                     Sync.Release();
+                    if (complete) break;
                 }
-                {
-                    using DataStream<MemoryStream> outputStream = new(new());
-                    outputStream.WriteS32(streamId);
-                    outputStream.WriteS32(0);
-                    byte[] outputBuffer = outputStream.Stream.ToArray();
-                    await Sync.WaitAsync();
-                    await Stream.WriteS32Async(outputBuffer.Length);
-                    await Stream.WriteU8AAsync(outputBuffer);
-                    Sync.Release();
-                }
+                stream.Writer!.Complete();
+                Streams.Remove(streamId);
             }
             catch (Exception)
             {
                 Dispose();
-            }
-            finally
-            {
-                
             }
         }
     }
