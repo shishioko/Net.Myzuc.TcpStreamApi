@@ -126,7 +126,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
                     _ = HandleAsync(await Stream.ReadU8AAsync(await Stream.ReadS32Async()));
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
 
             }

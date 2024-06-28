@@ -11,12 +11,12 @@ namespace Net.Myzuc.TcpStreamApi.Server
     public sealed class TSApiServer
     {
         internal readonly SemaphoreSlim Sync = new(1, 1);
-        internal readonly Dictionary<string, Func<byte[], ChannelStream>> Endpoints = [];
+        internal readonly Dictionary<string, Func<byte[], Task<ChannelStream>>> Endpoints = [];
         public TSApiServer()
         {
 
         }
-        public async Task Listen(IPEndPoint host)
+        public async Task ListenAsync(IPEndPoint host)
         {
             using Socket socket = new(host.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             socket.Bind(host);
@@ -24,10 +24,10 @@ namespace Net.Myzuc.TcpStreamApi.Server
             while (true)
             {
                 Socket client = await socket.AcceptAsync();
-                _ = Serve(client);
+                _ = ServeAsync(client);
             }
         }
-        private async Task Serve(Socket socket)
+        private async Task ServeAsync(Socket socket)
         {
             try
             {
@@ -38,7 +38,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
 
             }
         }
-        public bool RegisterEndpoint(string endpoint, Func<byte[], ChannelStream> method)
+        public bool RegisterEndpoint(string endpoint, Func<byte[], Task<ChannelStream>> method)
         {
             Sync.Wait();
             bool result = Endpoints.TryAdd(endpoint, method);

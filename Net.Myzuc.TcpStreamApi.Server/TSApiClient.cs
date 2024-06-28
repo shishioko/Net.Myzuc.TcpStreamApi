@@ -70,12 +70,12 @@ namespace Net.Myzuc.TcpStreamApi.Server
                 using DataStream responseStream = new();
                 responseStream.WriteS32(streamId);
                 responseStream.WriteS32(4);
-                if (Server.Endpoints.TryGetValue(requestStream.ReadStringS32(), out Func<byte[], ChannelStream>? method))
+                if (Server.Endpoints.TryGetValue(requestStream.ReadStringS32(), out Func<byte[], Task<ChannelStream>>? method))
                 {
                     Exception? exception = null;
                     try
                     {
-                        ChannelStream communications = method(requestStream.ReadU8A(requestStream.ReadS32()));
+                        ChannelStream communications = await method!(requestStream.ReadU8A(requestStream.ReadS32()));
                         responseStream.WriteS32((communications.Reader is not null ? 0x01 : 0x00) | (communications.Writer is not null ? 0x02 : 0x00));
                         if (communications.Writer is not null) Streams.Add(streamId, communications.Writer);
                         if (communications.Reader is not null) _ = SendAsync(streamId, communications.Reader);
