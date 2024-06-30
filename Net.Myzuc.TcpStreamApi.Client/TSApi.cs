@@ -4,9 +4,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Net.Myzuc.TcpStreamApi.Client
 {
@@ -40,15 +42,16 @@ namespace Net.Myzuc.TcpStreamApi.Client
         {
             Socket socket = new(host.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             await socket.ConnectAsync(host);
-            return new(socket);
+            TSApi tsapi = new(socket);
+            await tsapi.InitializeAsync();
+            return tsapi;
         }
-        private readonly DataStream<NetworkStream> Stream;
+        private DataStream<Stream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
         private TSApi(Socket socket)
         {
             Stream = new(new NetworkStream(socket));
-            _ = ReceiveAsync();
         }
         public void Dispose()
         {
@@ -67,48 +70,56 @@ namespace Net.Myzuc.TcpStreamApi.Client
             while (Streams.ContainsKey(streamId)) streamId = Guid.NewGuid();
             (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
             Streams.Add(streamId, appStream);
+            byte[] data = Encoding.UTF8.GetBytes(endpoint);
+            await Stream.WriteGuidAsync(streamId);
+            await Stream.WriteU8AVAsync(data);
+            await Stream.WriteU8AAsync(new byte[(32 - ((16 + data.Length) % 32)) & 31]);
             _ = SendAsync(streamId, appStream);
             Sync.Release();
-            using DataStream<MemoryStream> requestStream = new(new());
-            requestStream.WriteGuid(streamId);
-            requestStream.WriteU8A(Encoding.UTF8.GetBytes(endpoint));
-            await Sync.WaitAsync();
-            await Stream.WriteU8AVAsync(requestStream.Stream.ToArray());
-            Sync.Release();
             return userStream;
+        }
+        private async Task InitializeAsync()
+        {
+            using RSA rsa = RSA.Create();
+            rsa.KeySize = 2048;
+            await Stream.WriteU8AVAsync(rsa.ExportRSAPublicKey());
+            byte[] secret = rsa.Decrypt(await Stream.ReadU8AVAsync(), RSAEncryptionPadding.Pkcs1);
+            using Aes aes = Aes.Create();
+            aes.Mode = CipherMode.CFB;
+            aes.BlockSize = 128;
+            aes.FeedbackSize = 8;
+            aes.KeySize = 256;
+            aes.Key = secret;
+            aes.IV = secret[..16];
+            aes.Padding = PaddingMode.PKCS7;
+            TwoWayStream<CryptoStream, CryptoStream> stream = new(new(Stream.Stream, aes.CreateDecryptor(), CryptoStreamMode.Read), new(Stream.Stream, aes.CreateEncryptor(), CryptoStreamMode.Write));
+            Stream = new(stream);
+            _ = ReceiveAsync();
         }
         private async Task ReceiveAsync()
         {
             try
             {
-                while (Stream.Stream.Socket.Connected)
+                while (true)
                 {
-                    _ = HandleAsync(await Stream.ReadU8AVAsync());
+                    Guid streamId = await Stream.ReadGuidAsync();
+                    byte[] data = await Stream.ReadU8AVAsync();
+                    await Sync.WaitAsync();
+                    if (!Streams.TryGetValue(streamId, out ChannelStream? stream)) throw new ProtocolViolationException("Unregistered stream was written");
+                    await stream!.WriteAsync(data);
+                    if (data.Length <= 0)
+                    {
+                        stream.Writer!.Complete();
+                        Streams.Remove(streamId);
+                    }
+                    Sync.Release();
+                    await Stream.ReadU8AAsync((32 - ((16 + data.Length) % 32)) & 31);
                 }
             }
             catch (Exception)
             {
-
-            }
-            finally
-            {
                 Dispose();
             }
-        }
-        private async Task HandleAsync(byte[] inputBuffer)
-        {
-            using DataStream<MemoryStream> inputStream = new(new(inputBuffer));
-            Guid streamId = inputStream.ReadGuid();
-            byte[] data = inputBuffer[16..];
-            await Sync.WaitAsync();
-            if (!Streams.TryGetValue(streamId, out ChannelStream? stream)) throw new ProtocolViolationException("Unregistered stream was written");
-            await stream!.WriteAsync(data);
-            if (data.Length <= 0)
-            {
-                stream.Writer!.Complete();
-                Streams.Remove(streamId);
-            }
-            Sync.Release();
         }
         private async Task SendAsync(Guid streamId, ChannelStream stream)
         {
@@ -118,11 +129,10 @@ namespace Net.Myzuc.TcpStreamApi.Client
                 {
                     bool complete = !await stream.Reader!.WaitToReadAsync();
                     byte[] data = complete ? [] : await stream.Reader!.ReadAsync();
-                    using DataStream<MemoryStream> outputStream = new(new());
-                    outputStream.WriteGuid(streamId);
-                    outputStream.WriteU8A(data);
                     await Sync.WaitAsync();
-                    await Stream.WriteU8AVAsync(outputStream.Stream.ToArray());
+                    await Stream.WriteGuidAsync(streamId);
+                    await Stream.WriteU8AVAsync(data);
+                    await Stream.WriteU8AAsync(new byte[(32 - ((16 + data.Length) % 32)) & 31]);
                     Sync.Release();
                     if (complete) break;
                 }

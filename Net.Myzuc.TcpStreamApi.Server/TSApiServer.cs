@@ -27,18 +27,8 @@ namespace Net.Myzuc.TcpStreamApi.Server
             while (true)
             {
                 Socket client = await socket.AcceptAsync();
-                _ = ServeAsync(client);
-            }
-        }
-        private async Task ServeAsync(Socket socket)
-        {
-            try
-            {
-                TSApiClient client = new(this, socket);
-            }
-            catch (Exception)
-            {
-
+                TSApiClient tsapi = new(this, client);
+                _ = tsapi.InitializeAsync();
             }
         }
     }
