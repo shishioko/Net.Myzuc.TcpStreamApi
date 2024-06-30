@@ -1,5 +1,4 @@
-﻿using Net.Myzuc.UtilLib;
-using System;
+﻿using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -10,10 +9,11 @@ namespace Net.Myzuc.TcpStreamApi.Server
     public sealed class TSApiServer
     {
         internal readonly SemaphoreSlim Sync = new(1, 1);
-        internal readonly Func<string, ChannelStream, Task> Handler;
-        public TSApiServer(Func<string, ChannelStream, Task> handler)
+        public event Func<EndPoint?, TSApiClient, Task> OnRequest = (EndPoint? endpoint, TSApiClient client) => Task.CompletedTask;
+        public event Func<Task> OnDisposed = () => Task.CompletedTask;
+        public TSApiServer()
         {
-            Handler = handler;
+
         }
         public void Listen(IPEndPoint host)
         {
@@ -26,10 +26,14 @@ namespace Net.Myzuc.TcpStreamApi.Server
             socket.Listen();
             while (true)
             {
-                Socket client = await socket.AcceptAsync();
-                TSApiClient tsapi = new(this, client);
-                _ = tsapi.InitializeAsync();
+                _ = ServeAsync(await socket.AcceptAsync());
             }
+        }
+        public async Task ServeAsync(Socket socket)
+        {
+            TSApiClient tsapi = new(socket);
+            await tsapi.InitializeAsync();
+            await OnRequest(socket.RemoteEndPoint, tsapi);
         }
     }
 }

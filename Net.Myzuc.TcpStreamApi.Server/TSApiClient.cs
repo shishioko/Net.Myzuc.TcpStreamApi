@@ -10,22 +10,30 @@ using System.Security.Cryptography;
 
 namespace Net.Myzuc.TcpStreamApi.Server
 {
-    internal sealed class TSApiClient : IDisposable
+    public sealed class TSApiClient : IDisposable, IAsyncDisposable
     {
-        private readonly TSApiServer Server;
         private DataStream<Stream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
-        public TSApiClient(TSApiServer server, Socket socket)
+        public event Func<string, ChannelStream, Task> OnRequest = (string endpoint, ChannelStream stream) => Task.CompletedTask;
+        public event Func<Task> OnDisposed = () => Task.CompletedTask;
+        internal TSApiClient(Socket socket)
         {
-            Server = server;
             Stream = new(new NetworkStream(socket));
+        }
+        public async ValueTask DisposeAsync()
+        {
+            await Stream.Stream.DisposeAsync();
+            Sync.Dispose();
+            foreach (ChannelStream stream in Streams.Values) await stream.DisposeAsync();
+            await OnDisposed();
         }
         public void Dispose()
         {
-            Stream.Dispose();
+            Stream.Stream.Dispose();
             Sync.Dispose();
             foreach (ChannelStream stream in Streams.Values) stream.Dispose();
+            OnDisposed().Wait();
         }
         internal async Task InitializeAsync()
         {
@@ -69,7 +77,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
                         (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
                         Streams.Add(streamId, appStream);
                         _ = SendAsync(streamId, appStream);
-                        _ = Server.Handler(Encoding.UTF8.GetString(data), userStream);
+                        await OnRequest(Encoding.UTF8.GetString(data), userStream);
                     }
                     Sync.Release();
                     await Stream.ReadU8AAsync((32 - ((16 + data.Length) % 32)) & 31);
@@ -77,7 +85,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
             }
             catch (Exception)
             {
-                Dispose();
+                await DisposeAsync();
             }
         }
         private async Task SendAsync(Guid streamId, ChannelStream stream)
@@ -88,11 +96,9 @@ namespace Net.Myzuc.TcpStreamApi.Server
                 {
                     bool complete = !await stream.Reader!.WaitToReadAsync();
                     byte[] data = complete ? [] : await stream.Reader!.ReadAsync();
-                    await Sync.WaitAsync();
                     await Stream.WriteGuidAsync(streamId);
                     await Stream.WriteU8AVAsync(data);
                     await Stream.WriteU8AAsync(new byte[(32 - ((16 + data.Length) % 32)) & 31]);
-                    Sync.Release();
                     if (complete) break;
                 }
                 stream.Writer!.Complete();
@@ -100,7 +106,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
             }
             catch (Exception)
             {
-                Dispose();
+                await DisposeAsync();
             }
         }
     }
