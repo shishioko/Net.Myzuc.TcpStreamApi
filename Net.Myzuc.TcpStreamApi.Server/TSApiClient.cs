@@ -17,9 +17,9 @@ namespace Net.Myzuc.TcpStreamApi.Server
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
         public event Func<string, ChannelStream, Task> OnRequest = (string endpoint, ChannelStream stream) => Task.CompletedTask;
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        internal TSApiClient( Stream stream)
+        internal TSApiClient(Stream stream)
         {
-            Stream = new(stream);
+            Stream = new(stream, true);
         }
         public async ValueTask DisposeAsync()
         {
@@ -51,7 +51,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
             aes.IV = secret[..16];
             aes.Padding = PaddingMode.PKCS7;
             TwoWayStream<CryptoStream, CryptoStream> stream = new(new(Stream.Stream, aes.CreateDecryptor(), CryptoStreamMode.Read, false), new(Stream.Stream, aes.CreateEncryptor(), CryptoStreamMode.Write, false));
-            Stream = new(stream);
+            Stream = new(stream, true);
             _ = ReceiveAsync();
         }
         private async Task ReceiveAsync()

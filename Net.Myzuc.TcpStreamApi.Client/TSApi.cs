@@ -51,18 +51,18 @@ namespace Net.Myzuc.TcpStreamApi.Client
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
         private TSApi(Socket socket)
         {
-            Stream = new(new NetworkStream(socket));
+            Stream = new(new NetworkStream(socket), true);
         }
         public async ValueTask DisposeAsync()
         {
-            await Stream.DisposeAsync();
+            await Stream.Stream.DisposeAsync();
             Sync.Dispose();
             foreach (ChannelStream stream in Streams.Values) await stream.DisposeAsync();
             await OnDisposed();
         }
         public void Dispose()
         {
-            Stream.Dispose();
+            Stream.Stream.Dispose();
             Sync.Dispose();
             foreach (ChannelStream stream in Streams.Values) stream.Dispose();
             OnDisposed().Wait();
@@ -101,7 +101,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
             aes.IV = secret[..16];
             aes.Padding = PaddingMode.PKCS7;
             TwoWayStream<CryptoStream, CryptoStream> stream = new(new(Stream.Stream, aes.CreateDecryptor(), CryptoStreamMode.Read), new(Stream.Stream, aes.CreateEncryptor(), CryptoStreamMode.Write));
-            Stream = new(stream);
+            Stream = new(stream, true);
             _ = ReceiveAsync();
         }
         private async Task ReceiveAsync()
