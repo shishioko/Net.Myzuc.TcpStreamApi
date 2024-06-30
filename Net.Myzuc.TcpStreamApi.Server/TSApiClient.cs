@@ -6,6 +6,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Security.Cryptography;
+using System.Net;
 
 namespace Net.Myzuc.TcpStreamApi.Server
 {
@@ -16,8 +17,10 @@ namespace Net.Myzuc.TcpStreamApi.Server
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
         public event Func<string, ChannelStream, Task> OnRequest = (string endpoint, ChannelStream stream) => Task.CompletedTask;
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        internal TSApiClient(Stream stream)
+        public readonly EndPoint? Endpoint;
+        internal TSApiClient(EndPoint? endpoint, Stream stream)
         {
+            Endpoint = endpoint;
             Stream = new(stream);
         }
         public async ValueTask DisposeAsync()
