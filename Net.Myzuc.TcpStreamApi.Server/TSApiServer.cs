@@ -33,7 +33,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
         }
         public async Task ServeAsync(EndPoint? endpoint, Stream stream)
         {
-            TSApiClient tsapi = new(endpoint, stream);
+            TSApiClient tsapi = new(stream);
             await tsapi.InitializeAsync();
             await OnRequest(endpoint, tsapi);
         }

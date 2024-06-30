@@ -17,10 +17,8 @@ namespace Net.Myzuc.TcpStreamApi.Server
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
         public event Func<string, ChannelStream, Task> OnRequest = (string endpoint, ChannelStream stream) => Task.CompletedTask;
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        public readonly EndPoint? Endpoint;
-        internal TSApiClient(EndPoint? endpoint, Stream stream)
+        internal TSApiClient( Stream stream)
         {
-            Endpoint = endpoint;
             Stream = new(stream);
         }
         public async ValueTask DisposeAsync()
