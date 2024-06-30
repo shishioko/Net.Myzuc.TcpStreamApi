@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -26,14 +27,19 @@ namespace Net.Myzuc.TcpStreamApi.Server
             socket.Listen();
             while (true)
             {
-                _ = ServeAsync(await socket.AcceptAsync());
+                Socket client = await socket.AcceptAsync();
+                _ = ServeAsync(client.RemoteEndPoint, new NetworkStream(client));
             }
         }
-        public async Task ServeAsync(Socket socket)
+        public async Task ServeAsync(EndPoint? endpoint, Stream stream)
         {
-            TSApiClient tsapi = new(socket);
+            TSApiClient tsapi = new(stream);
             await tsapi.InitializeAsync();
-            await OnRequest(socket.RemoteEndPoint, tsapi);
+            await OnRequest(endpoint, tsapi);
+        }
+        public void Serve(EndPoint? endpoint, Stream stream)
+        {
+            ServeAsync(endpoint, stream).Wait();
         }
     }
 }

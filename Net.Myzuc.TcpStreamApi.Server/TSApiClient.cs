@@ -1,6 +1,5 @@
 ﻿using Net.Myzuc.UtilLib;
 using System.Collections.Generic;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using System;
@@ -17,9 +16,9 @@ namespace Net.Myzuc.TcpStreamApi.Server
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
         public event Func<string, ChannelStream, Task> OnRequest = (string endpoint, ChannelStream stream) => Task.CompletedTask;
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        internal TSApiClient(Socket socket)
+        internal TSApiClient(Stream stream)
         {
-            Stream = new(new NetworkStream(socket));
+            Stream = new(stream);
         }
         public async ValueTask DisposeAsync()
         {

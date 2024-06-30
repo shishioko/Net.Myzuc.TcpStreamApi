@@ -13,10 +13,6 @@ namespace Net.Myzuc.TcpStreamApi.Client
 {
     public sealed class TSApi : IDisposable, IAsyncDisposable
     {
-        public static TSApi Connect(string host, ushort port)
-        {
-            return ConnectAsync(host, port).Result;
-        }
         public static async Task<TSApi> ConnectAsync(string host, ushort port)
         {
             List<Exception> exceptions = [];
@@ -33,9 +29,9 @@ namespace Net.Myzuc.TcpStreamApi.Client
             }
             throw new AggregateException(exceptions);
         }
-        public static TSApi Connect(IPEndPoint host)
+        public static TSApi Connect(string host, ushort port)
         {
-            return ConnectAsync(host).Result;
+            return ConnectAsync(host, port).Result;
         }
         public static async Task<TSApi> ConnectAsync(IPEndPoint host)
         {
@@ -44,6 +40,10 @@ namespace Net.Myzuc.TcpStreamApi.Client
             TSApi tsapi = new(socket);
             await tsapi.InitializeAsync();
             return tsapi;
+        }
+        public static TSApi Connect(IPEndPoint host)
+        {
+            return ConnectAsync(host).Result;
         }
         private DataStream<Stream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
@@ -67,10 +67,6 @@ namespace Net.Myzuc.TcpStreamApi.Client
             foreach (ChannelStream stream in Streams.Values) stream.Dispose();
             OnDisposed().Wait();
         }
-        public ChannelStream Interact(string endpoint)
-        {
-            return InteractAsync(endpoint).Result;
-        }
         public async Task<ChannelStream> InteractAsync(string endpoint)
         {
             await Sync.WaitAsync();
@@ -85,6 +81,10 @@ namespace Net.Myzuc.TcpStreamApi.Client
             _ = SendAsync(streamId, appStream);
             Sync.Release();
             return userStream;
+        }
+        public ChannelStream Interact(string endpoint)
+        {
+            return InteractAsync(endpoint).Result;
         }
         private async Task InitializeAsync()
         {
