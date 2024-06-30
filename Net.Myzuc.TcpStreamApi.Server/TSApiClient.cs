@@ -62,7 +62,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
         {
             try
             {
-                while (true)
+                while (!Disposed)
                 {
                     Guid streamId = await Stream.ReadGuidAsync();
                     byte[] data = await Stream.ReadU8AVAsync();
@@ -89,6 +89,10 @@ namespace Net.Myzuc.TcpStreamApi.Server
             }
             catch (Exception)
             {
+
+            }
+            finally
+            {
                 await DisposeAsync();
             }
         }
@@ -96,7 +100,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
         {
             try
             {
-                while (true)
+                while (!Disposed)
                 {
                     bool complete = !await stream.Reader!.WaitToReadAsync();
                     byte[] data = complete ? [] : await stream.Reader!.ReadAsync();
@@ -109,6 +113,10 @@ namespace Net.Myzuc.TcpStreamApi.Server
                 Streams.Remove(streamId);
             }
             catch (Exception)
+            {
+
+            }
+            finally
             {
                 await DisposeAsync();
             }
