@@ -15,11 +15,9 @@ namespace Net.Myzuc.TcpStreamApi.Server
         private readonly Socket Socket;
         public event Func<EndPoint?, TSApiClient, Task> OnRequest = (EndPoint? endpoint, TSApiClient client) => Task.CompletedTask;
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        public TSApiServer(EndPoint host)
+        public TSApiServer(AddressFamily addressFamily)
         {
-            Socket = new(host.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-            Socket.Bind(host);
-            Socket.Listen();
+            Socket = new(addressFamily, SocketType.Stream, ProtocolType.Tcp);
         }
         public async ValueTask DisposeAsync()
         {
@@ -37,14 +35,17 @@ namespace Net.Myzuc.TcpStreamApi.Server
             Socket.Dispose();
             OnDisposed().Wait();
         }
-        public void Listen()
+        public void Listen(EndPoint endpoint)
         {
-            ListenAsync().Wait();
+            ListenAsync(endpoint).Wait();
         }
-        public async Task ListenAsync()
+        public async Task ListenAsync(EndPoint endpoint)
         {
             try
             {
+                if (Socket.AddressFamily != endpoint.AddressFamily) throw new ArgumentException();
+                Socket.Bind(endpoint);
+                Socket.Listen();
                 while (true)
                 {
                     Socket client = await Socket.AcceptAsync();
