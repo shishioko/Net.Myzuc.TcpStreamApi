@@ -45,6 +45,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
         {
             return ConnectAsync(host).Result;
         }
+        private bool Disposed = false;
         private DataStream<Stream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
@@ -55,6 +56,8 @@ namespace Net.Myzuc.TcpStreamApi.Client
         }
         public async ValueTask DisposeAsync()
         {
+            if (Disposed) return;
+            Disposed = true;
             await Stream.Stream.DisposeAsync();
             Sync.Dispose();
             foreach (ChannelStream stream in Streams.Values) await stream.DisposeAsync();
@@ -62,6 +65,8 @@ namespace Net.Myzuc.TcpStreamApi.Client
         }
         public void Dispose()
         {
+            if (Disposed) return;
+            Disposed = true;
             Stream.Stream.Dispose();
             Sync.Dispose();
             foreach (ChannelStream stream in Streams.Values) stream.Dispose();
