@@ -65,7 +65,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
                 while (!Disposed)
                 {
                     Guid streamId = await Stream.ReadGuidAsync();
-                    byte[] data = await Stream.ReadU8AVAsync();
+                    byte[] data = await Stream.ReadU8AAsync(await Stream.ReadS32Async());
                     await Sync.WaitAsync();
                     if (Streams.TryGetValue(streamId, out ChannelStream? stream))
                     {
@@ -84,7 +84,7 @@ namespace Net.Myzuc.TcpStreamApi.Server
                         await OnRequest(Encoding.UTF8.GetString(data), userStream);
                     }
                     Sync.Release();
-                    await Stream.ReadU8AAsync((32 - ((16 + data.Length) % 32)) & 31);
+                    await Stream.ReadU8AAsync((32 - ((20 + data.Length) % 32)) & 31);
                 }
             }
             catch (Exception)
@@ -105,8 +105,9 @@ namespace Net.Myzuc.TcpStreamApi.Server
                     bool complete = !await stream.Reader!.WaitToReadAsync();
                     byte[] data = complete ? [] : await stream.Reader!.ReadAsync();
                     await Stream.WriteGuidAsync(streamId);
-                    await Stream.WriteU8AVAsync(data);
-                    await Stream.WriteU8AAsync(new byte[(32 - ((16 + data.Length) % 32)) & 31]);
+                    await Stream.WriteS32Async(data.Length);
+                    await Stream.WriteU8AAsync(data);
+                    await Stream.WriteU8AAsync(new byte[(32 - ((20 + data.Length) % 32)) & 31]);
                     if (complete) break;
                 }
                 stream.Writer!.Complete();

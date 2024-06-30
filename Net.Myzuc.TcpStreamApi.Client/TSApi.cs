@@ -81,8 +81,9 @@ namespace Net.Myzuc.TcpStreamApi.Client
             Streams.Add(streamId, appStream);
             byte[] data = Encoding.UTF8.GetBytes(endpoint);
             await Stream.WriteGuidAsync(streamId);
-            await Stream.WriteU8AVAsync(data);
-            await Stream.WriteU8AAsync(new byte[(32 - ((16 + data.Length) % 32)) & 31]);
+            await Stream.WriteS32Async(data.Length);
+            await Stream.WriteU8AAsync(data);
+            await Stream.WriteU8AAsync(new byte[(32 - ((20 + data.Length) % 32)) & 31]);
             _ = SendAsync(streamId, appStream);
             Sync.Release();
             return userStream;
@@ -116,7 +117,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
                 while (!Disposed)
                 {
                     Guid streamId = await Stream.ReadGuidAsync();
-                    byte[] data = await Stream.ReadU8AVAsync();
+                    byte[] data = await Stream.ReadU8AAsync(await Stream.ReadS32Async());
                     await Sync.WaitAsync();
                     if (!Streams.TryGetValue(streamId, out ChannelStream? stream)) throw new ProtocolViolationException("Unregistered stream was written");
                     await stream!.WriteAsync(data);
@@ -126,7 +127,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
                         Streams.Remove(streamId);
                     }
                     Sync.Release();
-                    await Stream.ReadU8AAsync((32 - ((16 + data.Length) % 32)) & 31);
+                    await Stream.ReadU8AAsync((32 - ((20 + data.Length) % 32)) & 31);
                 }
             }
             catch (Exception)
@@ -147,8 +148,9 @@ namespace Net.Myzuc.TcpStreamApi.Client
                     bool complete = !await stream.Reader!.WaitToReadAsync();
                     byte[] data = complete ? [] : await stream.Reader!.ReadAsync();
                     await Stream.WriteGuidAsync(streamId);
-                    await Stream.WriteU8AVAsync(data);
-                    await Stream.WriteU8AAsync(new byte[(32 - ((16 + data.Length) % 32)) & 31]);
+                    await Stream.WriteS32Async(data.Length);
+                    await Stream.WriteU8AAsync(data);
+                    await Stream.WriteU8AAsync(new byte[(32 - ((20 + data.Length) % 32)) & 31]);
                     if (complete) break;
                 }
                 stream.Writer!.Complete();
