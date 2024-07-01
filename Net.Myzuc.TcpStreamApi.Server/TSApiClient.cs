@@ -6,6 +6,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Security.Cryptography;
+using System.Reflection;
 
 namespace Net.Myzuc.TcpStreamApi.Server
 {
@@ -44,6 +45,17 @@ namespace Net.Myzuc.TcpStreamApi.Server
         }
         internal async Task InitializeAsync()
         {
+            if (Assembly.GetExecutingAssembly().GetName().Version is not Version version)
+            {
+                await DisposeAsync();
+                throw new NotSupportedException("Version undefined");
+            }
+            await Stream.WriteStringS32VAsync(version.ToString());
+            if (version.ToString() != await Stream.ReadStringS32VAsync())
+            {
+                await DisposeAsync();
+                throw new NotSupportedException("Version mismatch");
+            }
             using RSA rsa = RSA.Create();
             rsa.KeySize = 2048;
             rsa.ImportRSAPublicKey(await Stream.ReadU8AVAsync(), out int _);
