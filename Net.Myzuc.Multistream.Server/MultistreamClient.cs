@@ -118,7 +118,7 @@ namespace Net.Myzuc.Multistream.Server
             }
             catch (Exception)
             {
-                 
+                
             }
             finally
             {
