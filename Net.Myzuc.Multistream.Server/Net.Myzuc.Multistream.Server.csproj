@@ -9,7 +9,7 @@
 		<RootNamespace>$(AssemblyName)</RootNamespace>
 		<PackageId>$(AssemblyName)</PackageId>
 		<Title>$(AssemblyName)</Title>
-		<Version>1.1.1.1</Version>
+		<Version>1.1.2.0</Version>
 		<Authors>shishioko@myzuc.net</Authors>
 		<Company>myzuc.net</Company>
 		<Product>Net.Myzuc.Multistream</Product>
