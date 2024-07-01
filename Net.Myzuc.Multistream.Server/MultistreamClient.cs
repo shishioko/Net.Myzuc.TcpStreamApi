@@ -98,22 +98,19 @@ namespace Net.Myzuc.Multistream.Server
                     Guid streamId = await Stream.ReadGuidAsync();
                     byte[] data = await Stream.ReadU8AAsync(SizePrefix.S32);
                     await Sync.WaitAsync();
-                    if (Streams.TryGetValue(streamId, out ChannelStream? stream))
+                    if (!Streams.TryGetValue(streamId, out ChannelStream? stream))
                     {
-                        await stream!.WriteAsync(data);
-                        if (data.Length <= 0)
-                        {
-                            stream.Writer!.Complete();
-                            Streams.Remove(streamId);
-                        }
-                    }
-                    else if (data.Length > 0)
-                    {
-                        
                         (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
                         Streams.Add(streamId, appStream);
                         _ = SendAsync(streamId, appStream);
                         await OnRequest(userStream);
+                        stream = appStream;
+                    }
+                    await stream!.WriteAsync(data);
+                    if (data.Length <= 0)
+                    {
+                        stream.Writer!.Complete();
+                        Streams.Remove(streamId);
                     }
                     Sync.Release();
                     await Stream.ReadU8AAsync(((16 - ((20 + data.Length) % 16)) & 15) + 16);
