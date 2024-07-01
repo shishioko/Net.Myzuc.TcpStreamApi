@@ -66,17 +66,17 @@ namespace Net.Myzuc.Multistream.Server
                 await DisposeAsync();
                 throw new NotSupportedException("Version undefined");
             }
-            await Stream.WriteStringS32VAsync(version.ToString());
-            if (version.ToString() != await Stream.ReadStringS32VAsync())
+            await Stream.WriteStringAsync(version.ToString(), SizePrefix.S32V);
+            if (version.ToString() != await Stream.ReadStringAsync(SizePrefix.S32V))
             {
                 await DisposeAsync();
                 throw new NotSupportedException("Version mismatch");
             }
             using RSA rsa = RSA.Create();
             rsa.KeySize = 2048;
-            rsa.ImportRSAPublicKey(await Stream.ReadU8AVAsync(), out int _);
+            rsa.ImportRSAPublicKey(await Stream.ReadU8AAsync(SizePrefix.S32V), out int _);
             byte[] secret = RandomNumberGenerator.GetBytes(32);
-            await Stream.WriteU8AVAsync(rsa.Encrypt(secret, RSAEncryptionPadding.Pkcs1));
+            await Stream.WriteU8AAsync(rsa.Encrypt(secret, RSAEncryptionPadding.Pkcs1), SizePrefix.S32V);
             using Aes aes = Aes.Create();
             aes.Mode = CipherMode.CFB;
             aes.BlockSize = 128;
@@ -96,7 +96,7 @@ namespace Net.Myzuc.Multistream.Server
                 while (!Disposed)
                 {
                     Guid streamId = await Stream.ReadGuidAsync();
-                    byte[] data = await Stream.ReadU8AAsync(await Stream.ReadS32Async());
+                    byte[] data = await Stream.ReadU8AAsync(SizePrefix.S32);
                     await Sync.WaitAsync();
                     if (Streams.TryGetValue(streamId, out ChannelStream? stream))
                     {
@@ -139,8 +139,7 @@ namespace Net.Myzuc.Multistream.Server
                     if (!complete && data.Length == 0) continue;
                     await SyncWrite.WaitAsync();
                     await Stream.WriteGuidAsync(streamId);
-                    await Stream.WriteS32Async(data.Length);
-                    await Stream.WriteU8AAsync(data);
+                    await Stream.WriteU8AAsync(data, SizePrefix.S32);
                     await Stream.WriteU8AAsync(new byte[((16 - ((20 + data.Length) % 16)) & 15) + 16]);
                     SyncWrite.Release();
                     if (complete) break;
