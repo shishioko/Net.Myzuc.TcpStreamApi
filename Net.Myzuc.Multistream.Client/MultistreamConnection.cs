@@ -14,7 +14,7 @@ namespace Net.Myzuc.Multistream.Client
     /// <summary>
     /// Representative of a connection to a Multistream server.
     /// </summary>
-    public sealed class Multistream : IDisposable, IAsyncDisposable
+    public sealed class MultistreamConnection : IDisposable, IAsyncDisposable
     {
         /// <summary>
         /// Establishes and initializes a new Multistream connection asynchronously.
@@ -23,7 +23,7 @@ namespace Net.Myzuc.Multistream.Client
         /// <param name="port">Port to connect to</param>
         /// <returns>A new Multistream connection</returns>
         /// <exception cref="AggregateException"></exception>
-        public static async Task<Multistream> ConnectAsync(string host, ushort port)
+        public static async Task<MultistreamConnection> ConnectAsync(string host, ushort port)
         {
             List<Exception> exceptions = [];
             foreach(IPAddress ip in (await Dns.GetHostEntryAsync(host)).AddressList)
@@ -46,29 +46,29 @@ namespace Net.Myzuc.Multistream.Client
         /// <param name="port">Port to connect to</param>
         /// <returns>A new Multistream connection</returns>
         /// <exception cref="AggregateException"></exception>
-        public static Multistream Connect(string host, ushort port)
+        public static MultistreamConnection Connect(string host, ushort port)
         {
             return ConnectAsync(host, port).Result;
         }
         /// <summary>
-        /// Creates and initializes a new <see cref="Net.Myzuc.Multistream.Client.Multistream"/> asynchronously.
+        /// Creates and initializes a new <see cref="Net.Myzuc.Multistream.Client.MultistreamConnection"/> asynchronously.
         /// </summary>
         /// <param name="host">The <see cref="System.Net.EndPoint"/> to connect to</param>
-        /// <returns>A new <see cref="Net.Myzuc.Multistream.Client.Multistream"/></returns>
-        public static async Task<Multistream> ConnectAsync(EndPoint host)
+        /// <returns>A new <see cref="Net.Myzuc.Multistream.Client.MultistreamConnection"/></returns>
+        public static async Task<MultistreamConnection> ConnectAsync(EndPoint host)
         {
             Socket socket = new(host.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             await socket.ConnectAsync(host);
-            Multistream multistream = new(socket);
+            MultistreamConnection multistream = new(socket);
             await multistream.InitializeAsync();
             return multistream;
         }
         /// <summary>
-        /// Creates and initializes a new <see cref="Net.Myzuc.Multistream.Client.Multistream"/> synchronously.
+        /// Creates and initializes a new <see cref="Net.Myzuc.Multistream.Client.MultistreamConnection"/> synchronously.
         /// </summary>
         /// <param name="host">The <see cref="System.Net.EndPoint"/> to connect to</param>
-        /// <returns>A new <see cref="Net.Myzuc.Multistream.Client.Multistream"/></returns>
-        public static Multistream Connect(IPEndPoint host)
+        /// <returns>A new <see cref="Net.Myzuc.Multistream.Client.MultistreamConnection"/></returns>
+        public static MultistreamConnection Connect(IPEndPoint host)
         {
             return ConnectAsync(host).Result;
         }
@@ -78,10 +78,10 @@ namespace Net.Myzuc.Multistream.Client
         private readonly SemaphoreSlim SyncWrite = new(1, 1);
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
         /// <summary>
-        /// Fired once after disposal of the <see cref="Net.Myzuc.Multistream.Client.Multistream"/> has finished.
+        /// Fired once after disposal of the <see cref="Net.Myzuc.Multistream.Client.MultistreamConnection"/> has finished.
         /// </summary>
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        private Multistream(Socket socket)
+        private MultistreamConnection(Socket socket)
         {
             Stream = new(new NetworkStream(socket), true);
         }
@@ -114,7 +114,7 @@ namespace Net.Myzuc.Multistream.Client
             OnDisposed().Wait();
         }
         /// <summary>
-        /// Opens a new <see cref="Net.Myzuc.UtilLib.ChannelStream"/> on the <see cref="Net.Myzuc.Multistream.Client.Multistream"/> asynchronously.
+        /// Opens a new <see cref="Net.Myzuc.UtilLib.ChannelStream"/> on the <see cref="Net.Myzuc.Multistream.Client.MultistreamConnection"/> asynchronously.
         /// </summary>
         /// <returns>The newly opened <see cref="Net.Myzuc.UtilLib.ChannelStream"/></returns>
         public async Task<ChannelStream> OpenAsync()
@@ -129,7 +129,7 @@ namespace Net.Myzuc.Multistream.Client
             return userStream;
         }
         /// <summary>
-        /// Opens a new <see cref="Net.Myzuc.UtilLib.ChannelStream"/> on the <see cref="Net.Myzuc.Multistream.Client.Multistream"/> synchronously.
+        /// Opens a new <see cref="Net.Myzuc.UtilLib.ChannelStream"/> on the <see cref="Net.Myzuc.Multistream.Client.MultistreamConnection"/> synchronously.
         /// </summary>
         /// <returns>The newly opened <see cref="Net.Myzuc.UtilLib.ChannelStream"/></returns>
         public ChannelStream Open()
