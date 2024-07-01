@@ -48,6 +48,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
         private bool Disposed = false;
         private DataStream<Stream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
+        private readonly SemaphoreSlim SyncWrite = new(1, 1);
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
         private TSApi(Socket socket)
@@ -60,6 +61,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
             Disposed = true;
             await Stream.Stream.DisposeAsync();
             Sync.Dispose();
+            SyncWrite.Dispose();
             foreach (ChannelStream stream in Streams.Values) await stream.DisposeAsync();
             await OnDisposed();
         }
@@ -69,6 +71,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
             Disposed = true;
             Stream.Stream.Dispose();
             Sync.Dispose();
+            SyncWrite.Dispose();
             foreach (ChannelStream stream in Streams.Values) stream.Dispose();
             OnDisposed().Wait();
         }
@@ -79,13 +82,9 @@ namespace Net.Myzuc.TcpStreamApi.Client
             while (Streams.ContainsKey(streamId)) streamId = Guid.NewGuid();
             (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
             Streams.Add(streamId, appStream);
-            byte[] data = Encoding.UTF8.GetBytes(endpoint);
-            await Stream.WriteGuidAsync(streamId);
-            await Stream.WriteS32Async(data.Length);
-            await Stream.WriteU8AAsync(data);
-            await Stream.WriteU8AAsync(new byte[(32 - ((20 + data.Length) % 32)) & 31]);
-            _ = SendAsync(streamId, appStream);
             Sync.Release();
+            _ = SendAsync(streamId, appStream);
+            await userStream.WriteAsync(Encoding.UTF8.GetBytes(endpoint));
             return userStream;
         }
         public ChannelStream Interact(string endpoint)
@@ -119,18 +118,20 @@ namespace Net.Myzuc.TcpStreamApi.Client
                     Guid streamId = await Stream.ReadGuidAsync();
                     byte[] data = await Stream.ReadU8AAsync(await Stream.ReadS32Async());
                     await Sync.WaitAsync();
-                    if (!Streams.TryGetValue(streamId, out ChannelStream? stream)) throw new ProtocolViolationException("Unregistered stream was written");
-                    await stream!.WriteAsync(data);
-                    if (data.Length <= 0)
+                    if (Streams.TryGetValue(streamId, out ChannelStream? stream))
                     {
-                        stream.Writer!.Complete();
-                        Streams.Remove(streamId);
+                        await stream!.WriteAsync(data);
+                        if (data.Length <= 0)
+                        {
+                            stream.Writer!.Complete();
+                            Streams.Remove(streamId);
+                        }
                     }
                     Sync.Release();
-                    await Stream.ReadU8AAsync((32 - ((20 + data.Length) % 32)) & 31);
+                    await Stream.ReadU8AAsync(((16 - ((20 + data.Length) % 16)) & 15) + 16);
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
 
             }
@@ -147,20 +148,21 @@ namespace Net.Myzuc.TcpStreamApi.Client
                 {
                     bool complete = !await stream.Reader!.WaitToReadAsync();
                     byte[] data = complete ? [] : await stream.Reader!.ReadAsync();
+                    if (!complete && data.Length == 0) continue;
+                    await SyncWrite.WaitAsync();
                     await Stream.WriteGuidAsync(streamId);
                     await Stream.WriteS32Async(data.Length);
                     await Stream.WriteU8AAsync(data);
-                    await Stream.WriteU8AAsync(new byte[(32 - ((20 + data.Length) % 32)) & 31]);
+                    await Stream.WriteU8AAsync(new byte[((16 - ((20 + data.Length) % 16)) & 15) + 16]);
+                    SyncWrite.Release();
                     if (complete) break;
                 }
-                stream.Writer!.Complete();
+                if (!stream.Reader!.Completion.IsCompleted) await stream.DisposeAsync();
+                await Sync.WaitAsync();
                 Streams.Remove(streamId);
+                Sync.Release();
             }
             catch (Exception)
-            {
-
-            }
-            finally
             {
                 await DisposeAsync();
             }
