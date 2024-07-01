@@ -4,12 +4,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using System;
 using System.IO;
-using System.Text;
 using System.Security.Cryptography;
 using System.Reflection;
 
 namespace Net.Myzuc.Multistream.Server
 {
+    /// <summary>
+    /// Representative of a connection to a Multistream client.
+    /// </summary>
     public sealed class MultistreamClient : IDisposable, IAsyncDisposable
     {
         private bool Disposed = false;
@@ -17,12 +19,22 @@ namespace Net.Myzuc.Multistream.Server
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly SemaphoreSlim SyncWrite = new(1, 1);
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
-        public event Func<string, ChannelStream, Task> OnRequest = (string endpoint, ChannelStream stream) => Task.CompletedTask;
+        /// <summary>
+        /// Fired whenever a <see cref="Net.Myzuc.UtilLib.ChannelStream"/> is opened.
+        /// </summary>
+        public event Func<ChannelStream, Task> OnRequest = (ChannelStream stream) => Task.CompletedTask;
+        /// <summary>
+        /// Fired once after disposal of the <see cref="Net.Myzuc.Multistream.Server.MultistreamClient"/> has finished.
+        /// </summary>
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
         internal MultistreamClient(Stream stream)
         {
             Stream = new(stream, true);
         }
+        /// <summary>
+        /// Closes all <see cref="Net.Myzuc.UtilLib.ChannelStream"/> and disposes the underlying <see cref="System.Net.Sockets.Socket"/> asynchronously.
+        /// </summary>
+        /// <returns></returns>
         public async ValueTask DisposeAsync()
         {
             if (Disposed) return;
@@ -33,6 +45,10 @@ namespace Net.Myzuc.Multistream.Server
             foreach (ChannelStream stream in Streams.Values) await stream.DisposeAsync();
             await OnDisposed();
         }
+        /// <summary>
+        /// Closes all <see cref="Net.Myzuc.UtilLib.ChannelStream"/> and disposes the underlying <see cref="System.Net.Sockets.Socket"/> synchronously.
+        /// </summary>
+        /// <returns></returns>
         public void Dispose()
         {
             if (Disposed) return;
@@ -97,7 +113,7 @@ namespace Net.Myzuc.Multistream.Server
                         (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
                         Streams.Add(streamId, appStream);
                         _ = SendAsync(streamId, appStream);
-                        await OnRequest(Encoding.UTF8.GetString(data), userStream);
+                        await OnRequest(userStream);
                     }
                     Sync.Release();
                     await Stream.ReadU8AAsync(((16 - ((20 + data.Length) % 16)) & 15) + 16);

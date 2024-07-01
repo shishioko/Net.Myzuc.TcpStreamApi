@@ -1,5 +1,4 @@
-﻿using Net.Myzuc.UtilLib;
-using System;
+﻿using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -8,17 +7,50 @@ using System.Threading.Tasks;
 
 namespace Net.Myzuc.Multistream.Server
 {
+    /// <summary>
+    /// Representative of a listener on a <see cref="System.Net.Sockets.Socket"/> that initializes incoming connections as <see cref="Net.Myzuc.Multistream.Server.MultistreamClient"/>.
+    /// </summary>
     public sealed class MultistreamServer : IDisposable, IAsyncDisposable
     {
+        /// <summary>
+        /// Creates and initializes a new <see cref="Net.Myzuc.Multistream.Server.MultistreamServer"/> asynchronously.
+        /// </summary>
+        /// <param name="endpoint"></param>
+        /// <returns></returns>
+        public static async Task<MultistreamServer> CreateAsync(EndPoint endpoint)
+        {
+            MultistreamServer multistream = new(endpoint.AddressFamily);
+            _ = multistream.ListenAsync(endpoint);
+            return multistream;
+        }
+        /// <summary>
+        /// Creates and initializes a new <see cref="Net.Myzuc.Multistream.Server.MultistreamServer"/> synchronously.
+        /// </summary>
+        /// <param name="endpoint"></param>
+        /// <returns></returns>
+        public static MultistreamServer Create(EndPoint endpoint)
+        {
+            return CreateAsync(endpoint).Result;
+        }
         private bool Disposed = false;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly Socket Socket;
+        /// <summary>
+        /// Fired whenever a new <see cref="Net.Myzuc.Multistream.Server.MultistreamClient"/> is opened.
+        /// </summary>
         public event Func<EndPoint?, MultistreamClient, Task> OnRequest = (EndPoint? endpoint, MultistreamClient client) => Task.CompletedTask;
+        /// <summary>
+        /// Fired once after disposal of the object <see cref="Net.Myzuc.Multistream.Server.MultistreamServer"/> finished.
+        /// </summary>
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        public MultistreamServer(AddressFamily addressFamily)
+        private MultistreamServer(AddressFamily addressFamily)
         {
             Socket = new(addressFamily, SocketType.Stream, ProtocolType.Tcp);
         }
+        /// <summary>
+        /// Closes the underlying listening <see cref="System.Net.Sockets.Socket"/> asynchronously.
+        /// </summary>
+        /// <returns></returns>
         public async ValueTask DisposeAsync()
         {
             if (Disposed) return;
@@ -27,6 +59,10 @@ namespace Net.Myzuc.Multistream.Server
             Socket.Dispose();
             await OnDisposed();
         }
+        /// <summary>
+        /// Closes the underlying listening <see cref="System.Net.Sockets.Socket"/> synchronously.
+        /// </summary>
+        /// <returns></returns>
         public void Dispose()
         {
             if (Disposed) return;
@@ -35,15 +71,10 @@ namespace Net.Myzuc.Multistream.Server
             Socket.Dispose();
             OnDisposed().Wait();
         }
-        public void Listen(EndPoint endpoint)
-        {
-            ListenAsync(endpoint).Wait();
-        }
-        public async Task ListenAsync(EndPoint endpoint)
+        private async Task ListenAsync(EndPoint endpoint)
         {
             try
             {
-                if (Socket.AddressFamily != endpoint.AddressFamily) throw new ArgumentException();
                 Socket.Bind(endpoint);
                 Socket.Listen();
                 while (true)
@@ -57,6 +88,12 @@ namespace Net.Myzuc.Multistream.Server
                 await DisposeAsync();
             }
         }
+        /// <summary>
+        /// Tries to inserts a foreign <see cref="System.Net.Sockets.Socket"/> into the <see cref="Net.Myzuc.Multistream.Server.MultistreamServer"/> asynchronously.
+        /// </summary>
+        /// <param name="endpoint"></param>
+        /// <param name="stream"></param>
+        /// <returns></returns>
         public async Task ServeAsync(EndPoint? endpoint, Stream stream)
         {
             try
@@ -70,6 +107,12 @@ namespace Net.Myzuc.Multistream.Server
 
             }
         }
+        /// <summary>
+        /// Tries to insert a foreign <see cref="System.Net.Sockets.Socket"/> into the <see cref="Net.Myzuc.Multistream.Server.MultistreamServer"/> synchronously.
+        /// </summary>
+        /// <param name="endpoint"></param>
+        /// <param name="stream"></param>
+        /// <returns></returns>
         public void Serve(EndPoint? endpoint, Stream stream)
         {
             ServeAsync(endpoint, stream).Wait();

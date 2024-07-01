@@ -3,20 +3,21 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <Nullable>annotations</Nullable>
     <AssemblyName>Net.Myzuc.Multistream.Client</AssemblyName>
-    <RootNamespace>Net.Myzuc.Multistream.Client</RootNamespace>
-    <PackageId>Net.Myzuc.Multistream.Client</PackageId>
-    <Title>Net.Myzuc.Multistream.Client</Title>
-    <Version>1.1.0.0</Version>
+    <RootNamespace>$(AssemblyName)</RootNamespace>
+    <PackageId>$(AssemblyName)</PackageId>
+    <Title>$(AssemblyName)</Title>
+    <Version>1.1.1.0</Version>
     <Authors>shishioko@myzuc.net</Authors>
     <Company>myzuc.net</Company>
     <Product>Net.Myzuc.Multistream</Product>
     <Copyright>myzuc.net 2024, All Rights Reserved.</Copyright>
     <RepositoryUrl>https://github.com/shishioko/Net.Myzuc.Multistream</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>$(Version)</AssemblyVersion>
+    <FileVersion>$(Version)</FileVersion>
+    <Description>The client side of a small library for hosting multiple streams on a primary encrypted AES256/CFB8 encrypted stream. </Description>
   </PropertyGroup>
 
   <ItemGroup>
