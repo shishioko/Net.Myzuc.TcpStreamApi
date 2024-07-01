@@ -131,7 +131,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
                     await Stream.ReadU8AAsync(((16 - ((20 + data.Length) % 16)) & 15) + 16);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
 
             }
