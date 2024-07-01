@@ -4,16 +4,16 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>Net.Myzuc.TcpStreamApi.Client</AssemblyName>
-    <RootNamespace>Net.Myzuc.TcpStreamApi.Client</RootNamespace>
-    <PackageId>Net.Myzuc.TcpStreamApi.Client</PackageId>
-    <Title>Net.Myzuc.TcpStreamApi.Client</Title>
+    <AssemblyName>Net.Myzuc.Multistream.Client</AssemblyName>
+    <RootNamespace>Net.Myzuc.Multistream.Client</RootNamespace>
+    <PackageId>Net.Myzuc.Multistream.Client</PackageId>
+    <Title>Net.Myzuc.Multistream.Client</Title>
     <Version>1.1.0.0</Version>
     <Authors>shishioko@myzuc.net</Authors>
     <Company>myzuc.net</Company>
-    <Product>Net.Myzuc.TcpStreamApi</Product>
+    <Product>Net.Myzuc.Multistream</Product>
     <Copyright>myzuc.net 2024, All Rights Reserved.</Copyright>
-    <RepositoryUrl>https://github.com/shishioko/Net.Myzuc.TcpStreamApi</RepositoryUrl>
+    <RepositoryUrl>https://github.com/shishioko/Net.Myzuc.Multistream</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <AssemblyVersion>1.1.0.0</AssemblyVersion>
     <FileVersion>1.1.0.0</FileVersion>

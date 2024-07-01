@@ -6,16 +6,16 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Net.Myzuc.TcpStreamApi.Server
+namespace Net.Myzuc.Multistream.Server
 {
-    public sealed class TSApiServer : IDisposable, IAsyncDisposable
+    public sealed class MultistreamServer : IDisposable, IAsyncDisposable
     {
         private bool Disposed = false;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly Socket Socket;
-        public event Func<EndPoint?, TSApiClient, Task> OnRequest = (EndPoint? endpoint, TSApiClient client) => Task.CompletedTask;
+        public event Func<EndPoint?, MultistreamClient, Task> OnRequest = (EndPoint? endpoint, MultistreamClient client) => Task.CompletedTask;
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        public TSApiServer(AddressFamily addressFamily)
+        public MultistreamServer(AddressFamily addressFamily)
         {
             Socket = new(addressFamily, SocketType.Stream, ProtocolType.Tcp);
         }
@@ -61,9 +61,9 @@ namespace Net.Myzuc.TcpStreamApi.Server
         {
             try
             {
-                TSApiClient tsapi = new(stream);
-                await tsapi.InitializeAsync();
-                await OnRequest(endpoint, tsapi);
+                MultistreamClient multistream = new(stream);
+                await multistream.InitializeAsync();
+                await OnRequest(endpoint, multistream);
             }
             catch (Exception)
             {

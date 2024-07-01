@@ -1,60 +1,27 @@
 ﻿using Net.Myzuc.UtilLib;
-using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Net;
-using System.Net.Sockets;
-using System.Reflection;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System;
+using System.IO;
+using System.Text;
+using System.Security.Cryptography;
+using System.Reflection;
 
-namespace Net.Myzuc.TcpStreamApi.Client
+namespace Net.Myzuc.Multistream.Server
 {
-    public sealed class TSApi : IDisposable, IAsyncDisposable
+    public sealed class MultistreamClient : IDisposable, IAsyncDisposable
     {
-        public static async Task<TSApi> ConnectAsync(string host, ushort port)
-        {
-            List<Exception> exceptions = [];
-            foreach(IPAddress ip in (await Dns.GetHostEntryAsync(host)).AddressList)
-            {
-                try
-                {
-                    return await ConnectAsync(new IPEndPoint(ip, port));
-                }
-                catch (Exception ex)
-                {
-                    exceptions.Add(ex);
-                }
-            }
-            throw new AggregateException(exceptions);
-        }
-        public static TSApi Connect(string host, ushort port)
-        {
-            return ConnectAsync(host, port).Result;
-        }
-        public static async Task<TSApi> ConnectAsync(IPEndPoint host)
-        {
-            Socket socket = new(host.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-            await socket.ConnectAsync(host);
-            TSApi tsapi = new(socket);
-            await tsapi.InitializeAsync();
-            return tsapi;
-        }
-        public static TSApi Connect(IPEndPoint host)
-        {
-            return ConnectAsync(host).Result;
-        }
         private bool Disposed = false;
         private DataStream<Stream> Stream;
         private readonly SemaphoreSlim Sync = new(1, 1);
         private readonly SemaphoreSlim SyncWrite = new(1, 1);
         private readonly Dictionary<Guid, ChannelStream> Streams = [];
+        public event Func<string, ChannelStream, Task> OnRequest = (string endpoint, ChannelStream stream) => Task.CompletedTask;
         public event Func<Task> OnDisposed = () => Task.CompletedTask;
-        private TSApi(Socket socket)
+        internal MultistreamClient(Stream stream)
         {
-            Stream = new(new NetworkStream(socket), true);
+            Stream = new(stream, true);
         }
         public async ValueTask DisposeAsync()
         {
@@ -76,23 +43,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
             foreach (ChannelStream stream in Streams.Values) stream.Dispose();
             OnDisposed().Wait();
         }
-        public async Task<ChannelStream> InteractAsync(string endpoint)
-        {
-            await Sync.WaitAsync();
-            Guid streamId = Guid.NewGuid();
-            while (Streams.ContainsKey(streamId)) streamId = Guid.NewGuid();
-            (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
-            Streams.Add(streamId, appStream);
-            Sync.Release();
-            _ = SendAsync(streamId, appStream);
-            await userStream.WriteAsync(Encoding.UTF8.GetBytes(endpoint));
-            return userStream;
-        }
-        public ChannelStream Interact(string endpoint)
-        {
-            return InteractAsync(endpoint).Result;
-        }
-        private async Task InitializeAsync()
+        internal async Task InitializeAsync()
         {
             if (Assembly.GetExecutingAssembly().GetName().Version is not Version version)
             {
@@ -107,8 +58,9 @@ namespace Net.Myzuc.TcpStreamApi.Client
             }
             using RSA rsa = RSA.Create();
             rsa.KeySize = 2048;
-            await Stream.WriteU8AVAsync(rsa.ExportRSAPublicKey());
-            byte[] secret = rsa.Decrypt(await Stream.ReadU8AVAsync(), RSAEncryptionPadding.Pkcs1);
+            rsa.ImportRSAPublicKey(await Stream.ReadU8AVAsync(), out int _);
+            byte[] secret = RandomNumberGenerator.GetBytes(32);
+            await Stream.WriteU8AVAsync(rsa.Encrypt(secret, RSAEncryptionPadding.Pkcs1));
             using Aes aes = Aes.Create();
             aes.Mode = CipherMode.CFB;
             aes.BlockSize = 128;
@@ -117,7 +69,7 @@ namespace Net.Myzuc.TcpStreamApi.Client
             aes.Key = secret;
             aes.IV = secret[..16];
             aes.Padding = PaddingMode.PKCS7;
-            TwoWayStream<CryptoStream, CryptoStream> stream = new(new(Stream.Stream, aes.CreateDecryptor(), CryptoStreamMode.Read), new(Stream.Stream, aes.CreateEncryptor(), CryptoStreamMode.Write));
+            TwoWayStream<CryptoStream, CryptoStream> stream = new(new(Stream.Stream, aes.CreateDecryptor(), CryptoStreamMode.Read, false), new(Stream.Stream, aes.CreateEncryptor(), CryptoStreamMode.Write, false));
             Stream = new(stream, true);
             _ = ReceiveAsync();
         }
@@ -138,6 +90,14 @@ namespace Net.Myzuc.TcpStreamApi.Client
                             stream.Writer!.Complete();
                             Streams.Remove(streamId);
                         }
+                    }
+                    else if (data.Length > 0)
+                    {
+                        
+                        (ChannelStream userStream, ChannelStream appStream) = ChannelStream.CreatePair();
+                        Streams.Add(streamId, appStream);
+                        _ = SendAsync(streamId, appStream);
+                        await OnRequest(Encoding.UTF8.GetString(data), userStream);
                     }
                     Sync.Release();
                     await Stream.ReadU8AAsync(((16 - ((20 + data.Length) % 16)) & 15) + 16);
