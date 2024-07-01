@@ -134,7 +134,7 @@ namespace Net.Myzuc.Multistream.Client
         /// <returns>The newly opened <see cref="Net.Myzuc.UtilLib.ChannelStream"/></returns>
         public ChannelStream Open()
         {
-            return Open().Result;
+            return OpenAsync().Result;
         }
         private async Task InitializeAsync()
         {
